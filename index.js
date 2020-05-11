@@ -1,79 +1,56 @@
-const Discord = require('discord.js');
+const Discord = require("discord.js");
 const fs = require('fs');
-const { prefix, token } = require('./cfg.json');
-
 const client = new Discord.Client();
+let cfg = require("./cfg.json");
 client.commands = new Discord.Collection();
+let cooldown = new Set();
+let cdseconds = 5;
 
-const commandFiles = fs.readdirSync('./commands').filter(file => file.endsWith('.js'));
+const prefix = cfg.prefix;
 
-for (const file of commandFiles) {
-  const command = require(`./commands/${file}`);
-  client.commands.set(command.name, command);
+fs.readdir("./commands", (err, files) => {
+
+ if(err) console.log(err);
+
+ let jsfile = files.filter(f => f.split(".").pop() === "js")
+ if(jsfile.length <= 0){
+   console.log("Tidak bisa menemukan CMD");
+   return;
+  }
+
+  jsfile.forEach((f, i) => {
+    let props = require(`./commands/${f}`);
+    console.log(`${f} loaded!`);
+    client.commands.set(props.help.name, props);
+  });
+
+});
+
+
+client.on("message", async message => {
+ if(message.author.bot) return;
+ if(message.channel.type === "dm") return;
+
+if(!message.content.startsWith(prefix)) return;
+
+if(cooldown.has(message.author.id)){
+  message.delete();
+  return message.reply("cooldown 5 Detik!")
 }
 
-//membuat cooldown
-const cooldowns = new Discord.Collection();
+  cooldown.add(message.author.id);
 
-client.once('ready', () => {
-  console.log(`Bot ${client.user.tag} Telah di Aktifkan`);
-});
+ let messageArray = message.content.split(" ");
+ let cmd = messageArray[0];
+ let args = messageArray.slice(1);
 
-client.on('message', message => {
-  if (!message.content.startsWith(prefix) || message.author.bot) return;
+ let commandfile = client.commands.get(cmd.slice(prefix.length));
+ if(commandfile) commandfile.run(client, message, args);
 
-  const args = message.content.slice(prefix.length).split(/ +/);
-  const commandName = args.shift().toLowerCase();
+setTimeout(() => {
+  cooldown.delete(message.author.id)
+}, cdseconds * 1000)
 
-  const command = client.commands.get(commandName)
-  //untuk menggunakan alias. contoh : command purge, bisa digunakn clier, menggunakan alias
-  	|| client.commands.find(cmd => cmd.aliases && cmd.aliases.includes(commandName));
+ });
 
-  if (!command) return;
-
-  //untuk membatasi command yang tidak bisa digunakan di DM
-  if (command.guildOnly && message.channel.type !== 'text') {
-    return message.replay('Saya tidak bisa menjalankan perintah ini di dalam DM!');
-  }
-
-  if (command.args && !args.length) {
-    let reply = `Anda tidak memberikan argumen apa pun, ${message.author}!`;
-
-    if (command.usage) {
-      reply += `\nGunakan: \`${prefix}${command.name} ${command.usage}\``;
-    }
-
-    return message.channel.send(reply);
-  }
-
-  //untuk membuat cooldown saat menggunakan command agar user tidak spam
-  if (!cooldowns.has(command.name)) {
-    cooldowns.set(command.name, new Discord.Collection());
-  }
-
-const now = Date.now();
-  const timestamps = cooldowns.get(command.name);
-  const cooldownAmount = (command.cooldown || 3) * 1000;
-
-  if (timestamps.has(message.author.id)) {
-    const expirationTime = timestamps.get(message.author.id) + cooldownAmount;
-
-    if (now < expirationTime) {
-      const timeLeft = (expirationTime - now) / 1000;
-      return message.reply(`Tunggu ${timeLeft.toFixed(1)} detik sebelum menggunakan kembali command \`${command.name}\`.`);
-    }
-  }
-
-  timestamps.set(message.author.id, now);
-  setTimeout(() => timestamps.delete(message.author.id), cooldownAmount);
-
-  try {
-    command.execute(message, args);
-  } catch (error) {
-    console.error(error);
-    message.replay('ada yang salah saat mencoba menjalankan perintah ini!');
-  }
-
-});
-
-client.login(token);
+client.login(cfg.token);
