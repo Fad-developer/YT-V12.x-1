@@ -1,8 +1,9 @@
-module.exports = {
-  name: 'ping',
-  description: 'ping!',
-  cooldown: 5,
-  execute(message) {
-    message.channel.send('pong!!');
-  },
+const Discord = require("discord.js");
+
+module.exports.run = async (bot, message, args) => {
+ message.channel.send('🏓 Pong!');
+}
+
+module.exports.help = {
+    name: "ping"
 };
